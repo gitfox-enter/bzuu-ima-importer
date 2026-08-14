@@ -453,3 +453,6 @@ def git_push_progress():
         os.chdir(cwd)
     except Exception as e:
         log("git push 失败（非致命）: %s" % e)
+
+if __name__ == "__main__":
+    main()
