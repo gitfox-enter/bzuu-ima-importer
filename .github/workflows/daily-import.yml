@@ -1,0 +1,47 @@
+name: Daily Import
+
+on:
+  workflow_dispatch:        # 手动触发（随时可跑）
+  schedule:
+    - cron: "0 18 * * *"    # UTC 18:00 = 北京时间 02:00；未开启 ENABLE_DAILY 时自动跳过
+
+permissions:
+  contents: write           # 允许将进度 commit 回仓库
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    if: github.event_name == "workflow_dispatch" || vars.ENABLE_DAILY == "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unrar unzip
+          pip install -r requirements.txt
+
+      - name: Run incremental import
+        env:
+          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+        run: |
+          python bzuu_crawl_incremental.py >> crawl_incremental.log 2>&1 || tail -100 crawl_incremental.log
+
+      - name: Commit progress back
+        run: |
+          git config user.name "gitfox-enter"
+          git config user.email "gitfox-enter@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: daily progress update $(date +%Y-%m-%d)"
+            git push origin main
+          fi
