@@ -31,7 +31,7 @@ jobs:
           IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
           IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
         run: |
-          python bzuu_crawl_incremental.py >> crawl_incremental.log 2>&1 || tail -100 crawl_incremental.log
+          python bzuu_crawl_incremental.py 2>&1
 
       - name: Commit progress back
         run: |
