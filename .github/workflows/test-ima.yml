@@ -1,0 +1,21 @@
+name: Test IMA Import
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  test-import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test ima import_urls
+        env:
+          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+        run: |
+          python test_ima_import.py 2>&1
