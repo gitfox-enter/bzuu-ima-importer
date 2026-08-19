@@ -2,7 +2,7 @@ name: Image Import Only
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 18 * * 3"   # 每周三 18:30 UTC 执行
+    - cron: "30 18 * * 3"
 permissions:
   contents: write
 
@@ -23,7 +23,7 @@ jobs:
 
       - name: Install deps
         run: |
-          pip install beautifulsoup4 lxml requests qcloud-cos-python-sdk-v5
+          pip install beautifulsoup4 lxml requests cos-python-sdk-v5
 
       - name: Run image import
         env:
