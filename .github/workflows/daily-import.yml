@@ -9,7 +9,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     if: ${{ github.event_name == 'workflow_dispatch' || vars.ENABLE_DAILY == 'true' }}
     steps:
       - name: Checkout
@@ -32,6 +32,13 @@ jobs:
           IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
         run: |
           python bzuu_crawl_incremental.py 2>&1
+
+      - name: Run image import
+        env:
+          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+        run: |
+          python bzuu_image_import.py 2>&1
 
       - name: Commit progress back
         run: |
