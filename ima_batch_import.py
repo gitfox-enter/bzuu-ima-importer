@@ -149,8 +149,11 @@ def import_articles_batch(column, arts):
                 else:
                     done += 1
                     done_set.add(u)
+                    for a in batch:
+                        if a["url"] == u:
+                            import_article_images(a, folder_id)
+                            break
         else:
-            # 整批失败：重试3次
             batch_failed = True
             for attempt in range(1, 4):
                 print(f"  ⚠️ 批失败 code={res.get('code')} msg={res.get('msg', '')}, 第{attempt}次重试", flush=True)
@@ -170,14 +173,16 @@ def import_articles_batch(column, arts):
                         else:
                             done += 1
                             done_set.add(u)
+                            for a in batch:
+                                if a["url"] == u:
+                                    import_article_images(a, folder_id)
+                                    break
                     break
             if batch_failed:
                 failed.extend(urls)
-        # 每批保存进度
         progress["articles_done"] = list(done_set)
         save_progress(progress)
         print(f"[{column}] 进度 {done}/{total}, 失败 {len(failed)}", flush=True)
-        # 每10批短暂暂停，避免限流
         if (i // 10) % 10 == 9:
             time.sleep(1)
     print(f"[{column}] 完成: {done}/{total}, 失败: {len(failed)}", flush=True)
@@ -190,7 +195,6 @@ def import_attachment(att, folder_id):
     name = att["name"]
     column = att.get("column", "未分类")
 
-    # 解析扩展名
     ext = url.split("?")[0].split(".")[-1].lower()
     if ext not in MEDIA_TYPE:
         print(f"  跳过不支持类型: {ext} {name}", flush=True)
@@ -199,10 +203,8 @@ def import_attachment(att, folder_id):
     media_type = MEDIA_TYPE[ext]
     content_type = CONTENT_TYPE.get(ext, "application/octet-stream")
 
-    # 下载文件
     tmp_path = f"/tmp/ima_att_{int(time.time() * 1000)}_{os.path.basename(url.split('?')[0])}"
     if not download_attachment(url, tmp_path):
-        # 尝试带UA重试
         if not download_attachment(url, tmp_path):
             print(f"  下载失败: {name}", flush=True)
             return None
@@ -213,7 +215,6 @@ def import_attachment(att, folder_id):
         os.remove(tmp_path)
         return None
 
-    # 1. create_media
     res = call_api("/create_media", {
         "file_name": name,
         "file_size": file_size,
@@ -230,7 +231,6 @@ def import_attachment(att, folder_id):
     media_id = data["media_id"]
     cred = data["cos_credential"]
 
-    # 2. COS 上传
     try:
         from qcloud_cos import CosConfig, CosS3Client
         config = CosConfig(
@@ -252,7 +252,6 @@ def import_attachment(att, folder_id):
         os.remove(tmp_path)
         return None
 
-    # 3. add_knowledge
     res = call_api("/add_knowledge", {
         "media_type": media_type,
         "media_id": media_id,
@@ -274,12 +273,72 @@ def import_attachment(att, folder_id):
         return None
 
 
+def import_article_images(article, folder_id):
+    """导入文章中的图片到知识库"""
+    images = article.get("images", [])
+    if not images:
+        return 0
+    ok = 0
+    for img_url in images:
+        if not img_url:
+            continue
+        name = os.path.basename(img_url.split("?")[0])
+        if not name:
+            name = f"image_{int(time.time() * 1000)}.jpg"
+        ext = name.split(".")[-1].lower() if "." in name else "jpg"
+        if ext not in MEDIA_TYPE or MEDIA_TYPE[ext] != 9:
+            continue
+        content_type = CONTENT_TYPE.get(ext, "image/jpeg")
+        tmp_path = f"/tmp/ima_img_{int(time.time() * 1000)}_{name}"
+        if not download_attachment(img_url, tmp_path):
+            print(f"  [图片] 下载失败: {img_url}", flush=True)
+            continue
+        file_size = os.path.getsize(tmp_path)
+        if file_size == 0:
+            os.remove(tmp_path)
+            continue
+        res = call_api("/create_media", {
+            "file_name": name, "file_size": file_size, "content_type": content_type,
+            "knowledge_base_id": KB_ID, "file_ext": ext,
+        }, timeout=60)
+        if res.get("code") != 0:
+            print(f"  [图片] create_media失败: {name} -> {res}", flush=True)
+            os.remove(tmp_path)
+            continue
+        data = res["data"]
+        media_id = data["media_id"]
+        cred = data["cos_credential"]
+        try:
+            from qcloud_cos import CosConfig, CosS3Client
+            config = CosConfig(Region=cred["region"], SecretId=cred["secret_id"], SecretKey=cred["secret_key"], Token=cred["token"])
+            client = CosS3Client(config)
+            with open(tmp_path, "rb") as fp:
+                client.put_object(Bucket=cred["bucket_name"], Body=fp, Key=cred["cos_key"], ContentType=content_type)
+        except Exception as e:
+            print(f"  [图片] COS上传失败: {name} -> {e}", flush=True)
+            os.remove(tmp_path)
+            continue
+        res = call_api("/add_knowledge", {
+            "media_type": 9, "media_id": media_id, "title": name,
+            "knowledge_base_id": KB_ID, "folder_id": folder_id,
+            "file_info": {"file_name": name, "file_size": file_size},
+        }, timeout=60)
+        os.remove(tmp_path)
+        if res.get("code") == 0:
+            ok += 1
+            print(f"  ✅ [图片] 导入成功: {name}", flush=True)
+        else:
+            print(f"  ❌ [图片] add_knowledge失败: {name} -> {res}", flush=True)
+    if ok:
+        print(f"  [图片] 文章 {article.get('url', '')[:60]}... 导入图片 {ok}/{len(images)}", flush=True)
+    return ok
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "articles"
     col_filter = sys.argv[2] if len(sys.argv) > 2 else None
     ext_filter = sys.argv[3] if len(sys.argv) > 3 else None
 
-    # 读取进度（断点续传）
     progress = {}
     if os.path.exists(PROGRESS_FILE):
         with open(PROGRESS_FILE) as f:
@@ -290,12 +349,10 @@ def main():
             arts = json.load(f)
         if col_filter:
             arts = [a for a in arts if a["column"] == col_filter]
-        # 过滤已导入
         progress = load_progress()
         done_set = set(progress.get("articles_done", []))
         pending = [a for a in arts if a["url"] not in done_set]
         print(f"[文章] 待导入: {len(pending)} (已完成 {len(done_set)})", flush=True)
-        # 按栏目分组导入（每组用各自 folder_id）
         from collections import defaultdict
         groups = defaultdict(list)
         for a in pending:
@@ -308,7 +365,6 @@ def main():
             print(f"========== 开始栏目 [{column}] {len(group)}篇 ==========", flush=True)
             failed = import_articles_batch(column, group)
             total_failed += len(failed)
-        # 不在 FOLDERS 中的栏目（兜底处理，不应发生）
         for column, group in groups.items():
             if column not in FOLDERS:
                 print(f"⚠️ 未映射栏目 [{column}] {len(group)}篇，跳过", flush=True)
@@ -323,7 +379,6 @@ def main():
         if ext_filter:
             exts = set(ext_filter.split(","))
             atts = [a for a in atts if a["url"].split("?")[0].split(".")[-1].lower() in exts]
-        # 过滤已导入
         progress = load_progress()
         done_set = set(progress.get("atts_done", []))
         pending = [a for a in atts if a["url"] not in done_set]
@@ -338,7 +393,6 @@ def main():
                 done_set.add(att["url"])
             else:
                 print(f"  跳过失败附件: {att.get('name')}", flush=True)
-            # 每10个保存一次进度
             if ok > 0 and ok % 10 == 0:
                 progress["atts_done"] = list(done_set)
                 save_progress(progress)
@@ -347,6 +401,36 @@ def main():
         progress["atts_done"] = list(done_set)
         save_progress(progress)
         print(f"[附件] 完成: {ok}/{len(pending)}", flush=True)
+
+    elif mode == "images":
+        with open(os.environ.get("MAIN_ARTICLES_FILE", "main_articles.json")) as f:
+            arts = json.load(f)
+        if col_filter:
+            arts = [a for a in arts if a["column"] == col_filter]
+        arts = [a for a in arts if a.get("images")]
+        print(f"[图片] 待处理文章数: {len(arts)}", flush=True)
+        progress = load_progress()
+        done_set = set(progress.get("images_done", []))
+        pending = [a for a in arts if a["url"] not in done_set]
+        print(f"[图片] 待补导: {len(pending)} (已完成 {len(done_set)})", flush=True)
+        total_ok = 0
+        total_skip = 0
+        for idx, a in enumerate(pending):
+            folder_id = FOLDERS.get(a["column"], KB_ID)
+            ok = import_article_images(a, folder_id)
+            if ok:
+                total_ok += ok
+                done_set.add(a["url"])
+            else:
+                total_skip += 1
+            if (idx + 1) % 10 == 0:
+                progress["images_done"] = list(done_set)
+                save_progress(progress)
+                print(f"[图片] 进度 {idx+1}/{len(pending)}, 图片导入 {total_ok} 张", flush=True)
+            time.sleep(0.3)
+        progress["images_done"] = list(done_set)
+        save_progress(progress)
+        print(f"[图片] 完成: 共导入 {total_ok} 张图片, 跳过 {total_skip} 篇", flush=True)
 
 
 if __name__ == "__main__":
