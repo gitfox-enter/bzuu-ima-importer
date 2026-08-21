@@ -1,0 +1,43 @@
+name: Fix Missing Images
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-imgs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install cos-python-sdk-v5 requests beautifulsoup4 lxml
+
+      - name: Run image backfill
+        env:
+          MAIN_ARTICLES_FILE: ${{ github.workspace }}/main_articles.json
+          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
+          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
+        run: |
+          python ima_batch_import.py images 2>&1
+
+      - name: Commit progress back
+        run: |
+          git config user.name "gitfox-enter"
+          git config user.email "gitfox-enter@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: image backfill progress $(date +%Y-%m-%d %H:%M)"
+            git push origin main
+          fi
