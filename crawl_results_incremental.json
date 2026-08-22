@@ -1,6 +1,7 @@
 {
-  "timestamp": "2026-08-22 06:14:52",
+  "timestamp": "2026-08-22 19:17:26",
   "new_articles_count": 0,
   "new_articles": [],
-  "total_urls_visited": 29
+  "total_urls_visited": 29,
+  "dry_run": false
 }
