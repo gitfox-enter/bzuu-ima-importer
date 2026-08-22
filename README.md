@@ -1,5 +1,8 @@
 # 亳州学院官网 → ima 知识库 自动导入
 
+[![GitHub Actions (daily-import)](https://github.com/gitfox-enter/bzuu-ima-importer/actions/workflows/daily-import.yml/badge.svg)](https://github.com/gitfox-enter/bzuu-ima-importer/actions/workflows/daily-import.yml)
+[![GitHub Actions (test-ima)](https://github.com/gitfox-enter/bzuu-ima-importer/actions/workflows/test-ima.yml/badge.svg)](https://github.com/gitfox-enter/bzuu-ima-importer/actions/workflows/test-ima.yml)
+
 自动抓取亳州学院官网（www.bzuu.edu.cn）的最新文章、附件和图片，通过 ima Open API 批量导入到 ima 知识库对应文件夹中。
 
 ## 系统架构
@@ -11,10 +14,10 @@
 │                     GitHub Actions 工作流体系                        │
 │                                                                     │
 │  daily-import.yml  →  增量爬取 + 导入 ima 知识库（每日定时）         │
-│  image-import.yml  →  图片补导（从已导入文章提取图片）               │
-│  fix-attachments.yml → 附件修复（补传子站遗漏附件）                 │
-│  fix-images.yml    →  图片修复                                       │
 │  test-ima.yml      →  ima API 连通性测试                            │
+│                                                                     │
+│  注：image-import、fix-attachments、fix-images 为历史工作流设计，    │
+│  当前实际运行仅 daily-import 和 test-ima 两个工作流。               │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,9 +62,6 @@ https://www.bzuu.edu.cn/xxx/: "folder_id_xxx"
 | 工作流 | 触发路径 | 可选参数 |
 |--------|----------|----------|
 | daily-import | Actions → 每日抓取导入 | dry_run（boolean） |
-| image-import | Actions → 每日图片补导 | 无 |
-| fix-attachments | Actions → 附件修复补导 | 无 |
-| fix-images | Actions → 图片修复 | 无 |
 | test-ima | Actions → 测试 ima API | 无 |
 
 ## 定时任务
@@ -69,7 +69,6 @@ https://www.bzuu.edu.cn/xxx/: "folder_id_xxx"
 | 工作流 | 定时 | 说明 |
 |--------|------|------|
 | daily-import | 每日 14:00 UTC（北京时间 22:00） | 增量爬取 + 导入 |
-| image-import | 每日 15:00 UTC（北京时间 23:00） | 导入新文章中的图片 |
 
 ## 文件说明
 
@@ -81,7 +80,7 @@ https://www.bzuu.edu.cn/xxx/: "folder_id_xxx"
 | ima_batch_import.py | 批量导入脚本：调用 ima import_urls API |
 | ima_archive_import.py | 压缩包处理脚本 |
 | ima_att_helpers.py | 附件提取公共模块（5 类正则匹配） |
-| ima_image_import.py | 图片导入脚本（旧版，由 image-import 工作流调用） |
+| ima_image_import.py | 图片导入脚本（旧版） |
 
 ### 模板
 
@@ -112,7 +111,7 @@ https://www.bzuu.edu.cn/xxx/: "folder_id_xxx"
 - **爬虫**: urllib（纯标准库，无外部 HTTP 依赖）
 - **解析**: BeautifulSoup
 - **API**: ima Open API（import_urls 端点）
-- **自动化**: GitHub Actions（5 个工作流）
+- **自动化**: GitHub Actions（2 个工作流）
 - **配置**: YAML 文件
 
 ## 相关项目
