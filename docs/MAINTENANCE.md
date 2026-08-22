@@ -1,6 +1,6 @@
 # bzxy 内容导入 ima 知识库 — 维护技术文档
 
-> 最后更新：2026-08-21
+> 最后更新：2026-08-22
 > 维护模式：**纯 GitHub Actions，不依赖任何服务器**
 
 ---
@@ -41,10 +41,9 @@
 | 工作流文件 | 触发方式 | 执行脚本 | 用途 | 超时 |
 |---|---|---|---|---|
 | `.github/workflows/daily-import.yml` | 每天 18:00 UTC + 手动触发 | `bzuu_crawl_incremental.py` → `bzuu_image_import.py` | 日常增量抓取 + 图片导入 | 60 分钟 |
-| `.github/workflows/image-import.yml` | 每周三 18:30 UTC + 手动触发 | `bzuu_image_import.py` | 图片增量导入（独立） | 60 分钟 |
 | `.github/workflows/test-ima.yml` | 仅手动触发 | `test_ima_import.py` | ima API 连通性测试 | 10 分钟 |
-| `.github/workflows/fix-attachments.yml` | 仅手动触发 | `fix_missed_attachments.py` | 附件补导（wp_pdf_player/pdfsrc 遗漏） | 360 分钟 |
-| `.github/workflows/fix-images.yml` | 仅手动触发 | `ima_batch_import.py images` | 图片补导（所有存量文章图片） | 480 分钟 |
+
+> 注：image-import.yml、fix-attachments.yml、fix-images.yml 为已设计但尚未创建/已下线的工作流，当前实际文件仅 daily-import 与 test-ima 两个。
 
 ### 3.2 各工作流说明
 
@@ -55,31 +54,6 @@
 - **前置条件**: 仓库 Variables 中 `ENABLE_DAILY=true` 才执行定时任务；手动触发不受影响
 - **步骤**: ① 增量抓取官网新文章 → ② 图片导入新文章
 - **进度回写**: `crawl_results_v5.json`、`main_articles.json`、`ima_import_progress.json`、`ima_archive_progress.json` 全部写回仓库
-
-#### image-import.yml — 图片导入（独立）
-
-- **每周定时**: 周三 UTC 18:30
-- **手动触发**: `workflow_dispatch` 始终可用
-- **用途**: 仅执行图片导入，不抓取新文章。适用于图片导入失败后单独重跑
-- **依赖**: `cos-python-sdk-v5>=1.9`、`requests`、`beautifulsoup4`、`lxml`
-
-#### fix-attachments.yml — 附件补导
-
-- **触发**: 仅 `workflow_dispatch`（手动触发）
-- **脚本**: `fix_missed_attachments.py`
-- **数据源**: `crawl_results_v5.json`（通过 `CRAWL_DATA` 环境变量指定路径）
-- **逻辑**: 扫描 crawl_results_v5.json 中 4213 篇文章，找出使用 `wp_pdf_player`/`pdfsrc` 的 94 篇文章，逐个重新提取附件并导入 ima
-- **支持参数**: `--dry-run`（仅预览不执行）、`--limit=N`（限制处理篇数）
-- **进度回写**: `ima_import_progress.json`、`ima_archive_progress.json`
-
-#### fix-images.yml — 图片补导
-
-- **触发**: 仅 `workflow_dispatch`（手动触发）
-- **脚本**: `ima_batch_import.py images`
-- **数据源**: `main_articles.json`（通过 `MAIN_ARTICLES_FILE` 环境变量指定路径）
-- **逻辑**: 从 main_articles.json 读取所有文章，找出有 `images` 字段但尚未导入的图片，逐张上传 COS → add_knowledge 写入 ima
-- **仅处理**: media_type=9 的四种图片格式（png / jpg / jpeg / webp）
-- **进度回写**: `ima_import_progress.json`（images_done 字段，支持断点续传）
 
 #### test-ima.yml — API 测试
 
@@ -127,10 +101,10 @@
 | 学习环境 | 93c094d6-b3b9-4600-82e6-b5d985a3f17b |
 | 媒体聚焦 | 4e5715f0-802e-42ee-9125-200705533623 |
 | 食宿环境 | 4a229169-e60e-485f-8447-807a65e35558 |
+| 国际教育 | 8153284d-2554-415a-9f8c-9b7211527c4c |
 | 影像亳院 | 18b00b7a-8e1d-4187-a7c2-1037b8281169 |
 | 招生就业 | 0d8c09f5-103b-48be-9055-09f8929a06d9 |
 | 亳文化研究 | d71786e9-1d42-4543-904a-d8938f75c443 |
-| 国际教育 | 8153284d-2554-415a-9f8c-9b7211527c4c |
 | 信息公开 | b29f4e8f-c0d1-4b89-992b-4c4c84a79295 |
 
 #### 支持的调用模式
@@ -164,7 +138,7 @@ python3 ima_batch_import.py test       # 测试模式：测试 API 连通性
 
 ### 4.2 `ima_att_helpers.py` — 附件提取公共模块
 
-**SHA**: `7483728d` | **大小**: 6302 字节 | **Commit**: `7483728d`（与文件名 SHA 一致）
+**SHA**: `7483728d` | **大小**: 6302 字节 | **Commit**: `7483728d`
 
 #### 修复内容
 
@@ -205,7 +179,7 @@ python3 ima_batch_import.py test       # 测试模式：测试 API 连通性
 
 ### 4.4 `bzuu_image_import.py` — 旧版图片导入脚本
 
-**大小**: 9007 字节 | 独立脚本，由 `daily-import.yml` 和 `image-import.yml` 调用。
+**大小**: 9007 字节 | 独立脚本，由 `daily-import.yml` 调用。
 
 > 注：新版图片导入已集成到 `ima_batch_import.py images`，但旧版 workflow 仍使用此脚本进行日常增量图片导入。
 
