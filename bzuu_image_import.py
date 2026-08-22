@@ -253,10 +253,13 @@ def main():
         print(f"  文章: {title[:40]} | {len(images)} 张图片", flush=True)
 
         for i, img_url in enumerate(images, 1):
+            key = f"{url}|{img_url}"
+            # 断点续传：已成功上传过的图片直接跳过，不再重传
+            if key in images_done:
+                continue
             media_id = upload_image(img_url, folder_id, title, i)
             if media_id:
                 uploaded += 1
-                key = f"{url}|{img_url}"
                 images_done.add(key)
             else:
                 errors += 1
