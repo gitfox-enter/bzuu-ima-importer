@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""BZUU增量爬取+自动导入ima知识库(v1)"""
+"""BZUU增量爬取+自动导入ima知识库(v2)
+
+优化记录:
+  1. 配置外置化: FOLDERS 硬编码 → sites_to_folders.yaml (YAML)
+  2. 纯 urllib 实现: 移除 requests 依赖
+  3. 新增 DRY_RUN 模式（仅统计不导入）
+"""
 import json, os, sys, time, re
 import urllib.request, urllib.error
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 try:
-    import bzuu_image_import as img_mod  # 复用图片上传能力
+    import bzuu_image_import as img_mod
 except Exception:
     img_mod = None
 
@@ -20,22 +26,44 @@ KB_ID = "OcnmLagVzsZ9JEUQTSKXBZCbhYML0l_LEmcEhjOtQ6M="
 BASE = "https://ima.qq.com/openapi/wiki/v1"
 CLIENT_ID = os.environ.get("IMA_CLIENT_ID") or open(os.path.expanduser("~/.config/ima/client_id")).read().strip()
 API_KEY = os.environ.get("IMA_API_KEY") or open(os.path.expanduser("~/.config/ima/api_key")).read().strip()
-FOLDERS = {
-    "学校要闻": "folder_7496797081597468",
-    "校园快讯": "folder_7496797081576566",
-    "通知公告": "folder_7496797081578945",
-    "亳院先锋": "folder_7496797081599483",
-    "学术动态": "folder_7496797081597045",
-    "人才引进": "folder_7496797081578778",
-    "学习环境": "folder_7496797081598269",
-    "媒体聚焦": "folder_7496797081575512",
-    "食宿环境": "folder_7496797081598893",
-    "影像亳院": "folder_7496797081597300",
-    "招生就业": "folder_7496797081597235",
-    "亳文化研究": "folder_7496797081597503",
-    "国际教育": "folder_7496797081576232",
-    "信息公开": "folder_7496797081598664",
-}
+DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("true", "1", "yes")
+
+# === 配置外置化: 从 YAML 加载 FOLDERS 映射 ===
+FOLDERS = {}
+YAML_PATH = os.environ.get("FOLDERS_YAML", "sites_to_folders.yaml")
+DEFAULT_FOLDER_ID = os.environ.get("DEFAULT_FOLDER_ID", "folder_7496797081578945")
+
+def load_folders():
+    global FOLDERS
+    if os.path.exists(YAML_PATH):
+        try:
+            import yaml
+            with open(YAML_PATH, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                FOLDERS = data.get("folders", {})
+                log("已加载 %d 个文件夹映射 (来自 %s)" % (len(FOLDERS), YAML_PATH))
+        except Exception as e:
+            log("加载YAML失败: %s" % e)
+    if not FOLDERS:
+        # 兜底默认映射
+        FOLDERS = {
+            "学校要闻": "folder_7496797081597468",
+            "校园快讯": "folder_7496797081576566",
+            "通知公告": "folder_7496797081578945",
+            "亳院先锋": "folder_7496797081599483",
+            "学术动态": "folder_7496797081597045",
+            "人才引进": "folder_7496797081578778",
+            "学习环境": "folder_7496797081598269",
+            "媒体聚焦": "folder_7496797081575512",
+            "食宿环境": "folder_7496797081598893",
+            "影像亳院": "folder_7496797081597300",
+            "招生就业": "folder_7496797081597235",
+            "亳文化研究": "folder_7496797081597503",
+            "国际教育": "folder_7496797081576232",
+            "信息公开": "folder_7496797081598664",
+        }
+        log("使用内置默认文件夹映射 (%d 个)" % len(FOLDERS))
+
 
 def log(msg):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -47,19 +75,21 @@ def log(msg):
     except Exception:
         pass
 
+
 def fetch_page(url, timeout=20, retries=3):
+    """纯 urllib 实现，移除 requests 依赖"""
     for attempt in range(retries + 1):
         try:
-            import requests
-            r = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
-            r.encoding = "utf-8"
-            return r.text, r.status_code
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", errors="replace"), r.status
         except Exception as e:
             if attempt < retries:
                 time.sleep(2)
             else:
                 return None, 0
     return None, 0
+
 
 def is_error_page(html):
     if not html:
@@ -69,6 +99,7 @@ def is_error_page(html):
     if title and ("提示信息" in title.get_text() or "没有找到" in title.get_text()):
         return True
     return False
+
 
 def extract_article_title(html):
     soup = BeautifulSoup(html, "lxml")
@@ -85,6 +116,7 @@ def extract_article_title(html):
             return title
     return ""
 
+
 def extract_single_page_content(html):
     soup = BeautifulSoup(html, "lxml")
     for cls in ["wp_articlecontent", "entry", "read", "contant", "con"]:
@@ -92,6 +124,7 @@ def extract_single_page_content(html):
         if div:
             return str(div)
     return ""
+
 
 def extract_article_links_from_list(html, base_url):
     articles = []
@@ -119,6 +152,7 @@ def extract_article_links_from_list(html, base_url):
         articles.append({"url": abs_url, "title": title, "date": date_str})
     return articles
 
+
 def get_next_page_url(html, base_url):
     if not html:
         return None
@@ -129,6 +163,7 @@ def get_next_page_url(html, base_url):
         if ("下一页" in text or "下页" in text or ">>" in text) and href and href != "javascript:void(0)":
             return urljoin(base_url, href)
     return None
+
 
 def crawl_article_page(url, column_name):
     html, status = fetch_page(url, timeout=15)
@@ -155,6 +190,7 @@ def crawl_article_page(url, column_name):
         "column": column_name,
         "images": images,
     }
+
 
 def crawl_column(column_name, list_url, visited, existing_urls, new_articles, max_pages=100):
     if list_url in visited:
@@ -214,6 +250,7 @@ def crawl_column(column_name, list_url, visited, existing_urls, new_articles, ma
             break
     return new_count
 
+
 def call_api(path, payload, timeout=120):
     req = urllib.request.Request(
         BASE + path,
@@ -234,7 +271,11 @@ def call_api(path, payload, timeout=120):
     except Exception as e:
         return {"error": str(e)}
 
+
 def import_new_articles(new_articles):
+    if DRY_RUN:
+        log("[DRY-RUN] 跳过导入，%d 篇待导入" % len(new_articles))
+        return
     if not new_articles:
         log("没有新文章需要导入")
         return
@@ -258,7 +299,7 @@ def import_new_articles(new_articles):
     total_imported = 0
     total_failed = 0
     for col_name, arts in by_column.items():
-        folder_id = FOLDERS[col_name]
+        folder_id = FOLDERS.get(col_name, DEFAULT_FOLDER_ID)
         urls = [a["url"] for a in arts]
         log("导入 %s: %d 篇" % (col_name, len(arts)))
         for i in range(0, len(urls), 10):
@@ -303,15 +344,16 @@ def import_new_articles(new_articles):
         log("  %s 导入完成: %d 篇" % (col_name, len(arts)))
     log("导入汇总: 新增 %d 篇, 成功 %d, 失败 %d" % (total_new, total_imported, total_failed))
 
+
 def resolve_folder(column):
-    """栏目 -> folder_id（与 import_new_articles 逻辑一致）"""
+    """栏目 -> folder_id"""
     for key in FOLDERS:
         if column.startswith(key):
             return FOLDERS[key]
     for key in FOLDERS:
         if key in column:
             return FOLDERS[key]
-    return FOLDERS["通知公告"]
+    return DEFAULT_FOLDER_ID
 
 
 def import_images_for_article(article, folder_id):
@@ -354,8 +396,13 @@ def import_images_for_article(article, folder_id):
 
 def main():
     log("=" * 60)
-    log("BZUU 增量爬取 + 自动导入")
+    log("BZUU 增量爬取 + 自动导入 v2")
+    label = " [DRY-RUN, 仅统计]" if DRY_RUN else ""
+    log(label)
     log("=" * 60)
+
+    load_folders()
+
     existing_urls = set()
     if os.path.exists(RESULTS_FILE):
         try:
@@ -456,7 +503,7 @@ def main():
             time.sleep(0.3)
 
     log("\n爬取完成。新文章: %d 篇" % len(new_articles))
-    if new_articles:
+    if new_articles and not DRY_RUN:
         log("\n开始导入新文章到 ima 知识库...")
         import_new_articles(new_articles)
         # === 新文章 附件 + 图片 一站式处理 ===
@@ -487,6 +534,8 @@ def main():
             log("附件+图片汇总: 附件成功 %d, 附件失败 %d, 附件跳过 %d, 图片 %d 张" % (att_ok, att_fail, att_skip, img_ok))
         except Exception as e:
             log("附件/图片处理异常: %s" % e)
+    elif DRY_RUN and new_articles:
+        log("\n[DRY-RUN] 跳过导入过程，仅统计")
     else:
         log("\n无新文章，跳过导入")
     incremental = {
@@ -494,11 +543,13 @@ def main():
         "new_articles_count": len(new_articles),
         "new_articles": new_articles,
         "total_urls_visited": len(visited),
+        "dry_run": DRY_RUN,
     }
     with open(INCREMENTAL_RESULTS, "w", encoding="utf-8") as f:
         json.dump(incremental, f, ensure_ascii=False, indent=2)
     log("增量结果保存到 %s" % INCREMENTAL_RESULTS)
     log("=" * 60)
+
 
 def git_push_progress():
     if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -521,6 +572,6 @@ def git_push_progress():
     except Exception as e:
         log("git push 失败（非致命）: %s" % e)
 
+
 if __name__ == "__main__":
     main()
-
