@@ -14,27 +14,27 @@ import urllib.request
 import urllib.error
 
 # ============ 配置 ============
-KB_ID = "8UWnCJWk0DlQ15ppsKOIeyNofz8ZBOJVt7e9Taeu7bg="
+KB_ID = "OcnmLagVzsZ9JEUQTSKXBZCbhYML0l_LEmcEhjOtQ6M="
 BASE = "https://ima.qq.com/openapi/wiki/v1"
 CLIENT_ID = os.environ.get("IMA_CLIENT_ID") or open(os.path.expanduser("~/.config/ima/client_id")).read().strip()
 API_KEY = os.environ.get("IMA_API_KEY") or open(os.path.expanduser("~/.config/ima/api_key")).read().strip()
 
 # 栏目 -> folder_id 映射
 FOLDERS = {
-    "学校要闻": "folder_7493563487102220",
-    "校园快讯": "folder_7493563491295428",
-    "通知公告": "folder_7493563495490231",
-    "亳院先锋": "folder_7493563495492675",
-    "学术动态": "folder_7493563499705585",
-    "人才引进": "folder_7493563503900179",
-    "学习环境": "folder_7493563508096422",
-    "媒体聚焦": "folder_7493563508073754",
-    "食宿环境": "folder_7493563512267920",
-    "影像亳院": "folder_7493563516483017",
-    "招生就业": "folder_7493563516461742",
-    "亳文化研究": "folder_7493563520677002",
-    "国际教育": "folder_7493563520677165",
-    "信息公开": "folder_7493563524871631",
+    "学校要闻": "folder_7496797081597468",
+    "校园快讯": "folder_7496797081576566",
+    "通知公告": "folder_7496797081578945",
+    "亳院先锋": "folder_7496797081599483",
+    "学术动态": "folder_7496797081597045",
+    "人才引进": "folder_7496797081578778",
+    "学习环境": "folder_7496797081598269",
+    "媒体聚焦": "folder_7496797081575512",
+    "食宿环境": "folder_7496797081598893",
+    "影像亳院": "folder_7496797081597300",
+    "招生就业": "folder_7496797081597235",
+    "亳文化研究": "folder_7496797081597503",
+    "国际教育": "folder_7496797081576232",
+    "信息公开": "folder_7496797081598664",
 }
 
 # 媒体类型映射（扩展名 -> media_type）
