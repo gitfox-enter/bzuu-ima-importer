@@ -26,8 +26,8 @@ jobs:
           sudo apt-get install -y unrar unzip
           pip install -r requirements.txt
 
-      # 图片导入已拆分至 image-import.yml（每周三独立运行），避免与增量爬取共用超时池
-      - name: Run incremental import
+      # 一站式：增量爬取 -> 导入文章 -> 附件补导 -> 图片上传，全部在脚本内完成
+      - name: Run unified import
         env:
           IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
           IMA_API_KEY: ${{ secrets.IMA_API_KEY }}

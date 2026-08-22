@@ -6,6 +6,11 @@ import urllib.request, urllib.error
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
+try:
+    import bzuu_image_import as img_mod  # 复用图片上传能力
+except Exception:
+    img_mod = None
+
 BASE_URL = "https://www.bzuu.edu.cn"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 RESULTS_FILE = os.environ.get("RESULTS_FILE", "crawl_results_v5.json")
@@ -298,6 +303,55 @@ def import_new_articles(new_articles):
         log("  %s 导入完成: %d 篇" % (col_name, len(arts)))
     log("导入汇总: 新增 %d 篇, 成功 %d, 失败 %d" % (total_new, total_imported, total_failed))
 
+def resolve_folder(column):
+    """栏目 -> folder_id（与 import_new_articles 逻辑一致）"""
+    for key in FOLDERS:
+        if column.startswith(key):
+            return FOLDERS[key]
+    for key in FOLDERS:
+        if key in column:
+            return FOLDERS[key]
+    return FOLDERS["通知公告"]
+
+
+def import_images_for_article(article, folder_id):
+    """上传一篇文章的全部图片（复用 bzuu_image_import，带断点续传）"""
+    if img_mod is None:
+        log("  bzuu_image_import 不可用，跳过图片上传")
+        return 0
+    images = article.get("images") or []
+    if not images:
+        html = img_mod.fetch_page(article.get("url", ""))
+        if html:
+            _, images = img_mod.extract_title_and_images(html)
+            article["images"] = images
+    if not images:
+        return 0
+    try:
+        progress = img_mod.load_progress()
+    except Exception:
+        progress = {}
+    images_done = set(progress.get("images_done", []))
+    title = article.get("title") or "未命名"
+    ok = 0
+    for i, img_url in enumerate(images, 1):
+        key = article.get("url", "") + "|" + img_url
+        if key in images_done:
+            continue
+        media_id = img_mod.upload_image(img_url, folder_id, title, i)
+        if media_id:
+            ok += 1
+            images_done.add(key)
+            log("  图片上传: %s" % img_url)
+        time.sleep(0.8)
+    progress["images_done"] = list(images_done)
+    try:
+        img_mod.save_progress(progress)
+    except Exception:
+        pass
+    return ok
+
+
 def main():
     log("=" * 60)
     log("BZUU 增量爬取 + 自动导入")
@@ -405,21 +459,34 @@ def main():
     if new_articles:
         log("\n开始导入新文章到 ima 知识库...")
         import_new_articles(new_articles)
-        # === 附件补导 ===
-        log("\n检查新文章附件...")
+        # === 新文章 附件 + 图片 一站式处理 ===
+        log("\n处理新文章附件与图片...")
         try:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from ima_att_helpers import import_article_attachments
             att_ok = att_fail = att_skip = 0
-            for art in new_articles:
-                ok, fail, skip = import_article_attachments(art)
-                att_ok += ok
-                att_fail += fail
-                att_skip += skip
-                time.sleep(0.2)
-            log("附件补导汇总: 成功 %d, 失败 %d, 跳过 %d" % (att_ok, att_fail, att_skip))
+            img_ok = 0
+            for idx, art in enumerate(new_articles, 1):
+                title = art.get("title", "")[:50]
+                url = art.get("url", "")[:60]
+                log("[%d/%d] %s | %s" % (idx, len(new_articles), title, url))
+                folder_id = resolve_folder(art.get("column", "通知公告"))
+                try:
+                    ok, fail, skip = import_article_attachments(art)
+                    att_ok += ok
+                    att_fail += fail
+                    att_skip += skip
+                except Exception as e:
+                    log("  附件异常: %s" % e)
+                try:
+                    n = import_images_for_article(art, folder_id)
+                    img_ok += n
+                except Exception as e:
+                    log("  图片异常: %s" % e)
+                time.sleep(0.3)
+            log("附件+图片汇总: 附件成功 %d, 附件失败 %d, 附件跳过 %d, 图片 %d 张" % (att_ok, att_fail, att_skip, img_ok))
         except Exception as e:
-            log("附件补导异常: %s" % e)
+            log("附件/图片处理异常: %s" % e)
     else:
         log("\n无新文章，跳过导入")
     incremental = {
@@ -456,3 +523,4 @@ def git_push_progress():
 
 if __name__ == "__main__":
     main()
+
