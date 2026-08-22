@@ -33,6 +33,7 @@ jobs:
           python ima_batch_import.py images 2>&1
 
       - name: Commit progress back
+        if: always()
         run: |
           git config user.name "gitfox-enter"
           git config user.email "gitfox-enter@users.noreply.github.com"
