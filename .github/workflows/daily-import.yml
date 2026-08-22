@@ -9,7 +9,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
     if: ${{ github.event_name == 'workflow_dispatch' || vars.ENABLE_DAILY == 'true' }}
     steps:
       - name: Checkout
@@ -26,6 +26,7 @@ jobs:
           sudo apt-get install -y unrar unzip
           pip install -r requirements.txt
 
+      # 图片导入已拆分至 image-import.yml（每周三独立运行），避免与增量爬取共用超时池
       - name: Run incremental import
         env:
           IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
@@ -33,14 +34,9 @@ jobs:
         run: |
           python bzuu_crawl_incremental.py 2>&1
 
-      - name: Run image import
-        env:
-          IMA_CLIENT_ID: ${{ secrets.IMA_CLIENT_ID }}
-          IMA_API_KEY: ${{ secrets.IMA_API_KEY }}
-        run: |
-          python bzuu_image_import.py 2>&1
-
+      # always(): 即使前序步骤失败/取消，也要把增量进度提交回仓库
       - name: Commit progress back
+        if: always()
         run: |
           git config user.name "gitfox-enter"
           git config user.email "gitfox-enter@users.noreply.github.com"
