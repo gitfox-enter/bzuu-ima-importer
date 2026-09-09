@@ -18,7 +18,16 @@ except Exception:
     img_mod = None
 
 BASE_URL = "https://www.bzuu.edu.cn"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Accept-Encoding": "identity",
+    "Connection": "keep-alive",
+}
 RESULTS_FILE = os.environ.get("RESULTS_FILE", "crawl_results_v5.json")
 INCREMENTAL_RESULTS = os.environ.get("INCREMENTAL_RESULTS", "crawl_results_incremental.json")
 LOG_FILE = os.environ.get("LOG_FILE", "crawl_incremental.log")
