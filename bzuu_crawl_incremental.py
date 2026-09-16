@@ -469,6 +469,7 @@ def main():
         ("国际教育", "http://www.bzuu.edu.cn/gjjyxy", "/gjjyxy/"),
         ("亳文化研究", "http://www.bzuu.edu.cn/bwhyjzx", "/bwhyjzx/"),
         ("信息公开", "http://www.bzuu.edu.cn/zwxxgk", "/zwxxgk/"),
+        ("学生处", "http://www.bzuu.edu.cn/xsc/", "/xsc/"),
     ]
 
     log("\n开始爬取主站导航...")
