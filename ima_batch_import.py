@@ -24,18 +24,32 @@ FOLDERS = {
     "学校要闻": "folder_7496797081597468",
     "校园快讯": "folder_7496797081576566",
     "通知公告": "folder_7496797081578945",
-    "亳院先锋": "folder_7496797081599483",
+    "亠院先锋": "folder_7496797081599483",
     "学术动态": "folder_7496797081597045",
     "人才引进": "folder_7496797081578778",
     "学习环境": "folder_7496797081598269",
     "媒体聚焦": "folder_7496797081575512",
     "食宿环境": "folder_7496797081598893",
-    "影像亳院": "folder_7496797081597300",
+    "影像亠院": "folder_7496797081597300",
     "招生就业": "folder_7496797081597235",
-    "亳文化研究": "folder_7496797081597503",
+    "亠文化研究": "folder_7496797081597503",
     "国际教育": "folder_7496797081576232",
     "信息公开": "folder_7496797081598664",
 }
+
+# 若存在 sites_to_folders.yaml，则以其映射为准（外置配置优先）
+try:
+    _yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sites_to_folders.yaml")
+    if os.path.exists(_yaml_path):
+        import yaml
+        with open(_yaml_path, encoding="utf-8") as _f:
+            _cfg = yaml.safe_load(_f) or {}
+        _extra = _cfg.get("folders", {})
+        if _extra:
+            FOLDERS.update(_extra)
+        print("[配置] 已从 sites_to_folders.yaml 加载 %d 个文件夹映射" % len(FOLDERS), flush=True)
+except Exception as _e:
+    print("[配置] 加载 sites_to_folders.yaml 失败, 使用内置映射: %s" % _e, flush=True)
 
 # 媒体类型映射（扩展名 -> media_type）
 MEDIA_TYPE = {
